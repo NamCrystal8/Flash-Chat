@@ -1,7 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:chat_app/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+final _fireStore = FirebaseFirestore.instance;
 class ChatScreen extends StatefulWidget {
   static String id = '/chat';
   @override
@@ -9,25 +10,38 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final messageController = TextEditingController();
   final _auth = FirebaseAuth.instance;
   late User loggedinUser;
-  void getCurrentUser() async{
+  late String messageText;
+
+  void getCurrentUser() async {
     try {
       final user = await _auth.currentUser!;
       if (user != null) {
         loggedinUser = user;
       }
-    }
-    catch (e) {
+    } catch (e) {
       print(e);
     }
   }
+
+  void messageStream() async {
+    await for (var snapshot in _fireStore.collection('messages').snapshots()) {
+      for (var message in snapshot.docs) {
+        print(message.data());
+      }
+    }
+  }
+
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
     getCurrentUser();
+    // getMessage();
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,8 +51,9 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
               icon: Icon(Icons.close),
               onPressed: () {
-                _auth.signOut();
-                Navigator.pop(context);
+                messageStream();
+                // _auth.signOut();
+                // Navigator.pop(context);
               }),
         ],
         title: Text('⚡️Chat'),
@@ -49,6 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            MessageStream(),
             Container(
               decoration: kMessageContainerDecoration,
               child: Row(
@@ -56,8 +72,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: <Widget>[
                   Expanded(
                     child: TextField(
+                      controller: messageController,
                       onChanged: (value) {
-                        //Do something with the user input.
+                        messageText = value;
                       },
                       decoration: kMessageTextFieldDecoration,
                     ),
@@ -65,6 +82,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   TextButton(
                     onPressed: () {
                       //Implement send functionality.
+                      messageController.clear();
+                      _fireStore.collection('messages').add(
+                          {'text': messageText, 'sender': loggedinUser.email});
                     },
                     child: Text(
                       'Send',
@@ -78,5 +98,69 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+  }
+}
+
+class MessageBubble extends StatelessWidget {
+  MessageBubble({required this.messageText,required this.messageSender});
+  late String messageText;
+  late String messageSender;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(messageSender, style: TextStyle(color: Colors.grey, fontSize: 12),),
+          Material(
+            borderRadius: BorderRadius.circular(30),
+            elevation: 5.0,
+            color: Colors.lightBlueAccent,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              child: Text(
+                '$messageText',
+                style: TextStyle(color: Colors.white70, fontSize: 15),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );;
+  }
+}
+
+class MessageStream extends StatelessWidget {
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+        stream: _fireStore.collection('messages').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return CircularProgressIndicator(
+              backgroundColor: Colors.lightBlueAccent,
+            );
+          } else {
+            final messages = snapshot.data?.docs;
+            List<MessageBubble> messageWidgets = [];
+            for (var message in messages!) {
+              final messageText =
+              (message.data() as Map<String, dynamic>)['text'];
+              final messageSender =
+              (message.data() as Map<String, dynamic>)['sender'];
+
+              final messageBubble = MessageBubble(messageText: messageText, messageSender: messageSender);
+              messageWidgets.add(messageBubble);
+            }
+            return Expanded(
+              child: ListView(
+                padding: EdgeInsets.symmetric(vertical: 10,horizontal: 5),
+                children: messageWidgets,
+              ),
+            );
+          }
+        });
   }
 }
