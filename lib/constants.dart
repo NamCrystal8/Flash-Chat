@@ -39,3 +39,5 @@ const kTextFieldDecoration = InputDecoration(
     borderRadius: BorderRadius.all(Radius.circular(32.0)),
   ),
 );
+
+const kChatBubbleRadius = Radius.circular(30);

@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:chat_app/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 final _fireStore = FirebaseFirestore.instance;
+late User loggedinUser;
 class ChatScreen extends StatefulWidget {
   static String id = '/chat';
   @override
@@ -12,7 +14,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final messageController = TextEditingController();
   final _auth = FirebaseAuth.instance;
-  late User loggedinUser;
+
   late String messageText;
 
   void getCurrentUser() async {
@@ -102,21 +104,30 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class MessageBubble extends StatelessWidget {
-  MessageBubble({required this.messageText,required this.messageSender});
+  MessageBubble({required this.messageText, required this.messageSender, required this.isMe});
   late String messageText;
   late String messageSender;
+  late bool isMe;
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(10),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Text(messageSender, style: TextStyle(color: Colors.grey, fontSize: 12),),
+          Text(
+            messageSender,
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
           Material(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.only(
+              topLeft: isMe ? kChatBubbleRadius : Radius.zero,
+              bottomLeft: kChatBubbleRadius,
+              bottomRight: kChatBubbleRadius,
+              topRight: isMe ? Radius.zero :  kChatBubbleRadius,
+            ),
             elevation: 5.0,
-            color: Colors.lightBlueAccent,
+            color: isMe? Colors.lightBlueAccent : Colors.blueAccent,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
               child: Text(
@@ -127,36 +138,41 @@ class MessageBubble extends StatelessWidget {
           ),
         ],
       ),
-    );;
+    );
+    ;
   }
 }
 
 class MessageStream extends StatelessWidget {
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
         stream: _fireStore.collection('messages').snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return CircularProgressIndicator(
+            return const CircularProgressIndicator(
               backgroundColor: Colors.lightBlueAccent,
             );
           } else {
-            final messages = snapshot.data?.docs;
+            final messages = snapshot.data?.docs.reversed;
             List<MessageBubble> messageWidgets = [];
             for (var message in messages!) {
               final messageText =
-              (message.data() as Map<String, dynamic>)['text'];
+                  (message.data() as Map<String, dynamic>)['text'];
               final messageSender =
-              (message.data() as Map<String, dynamic>)['sender'];
+                  (message.data() as Map<String, dynamic>)['sender'];
 
-              final messageBubble = MessageBubble(messageText: messageText, messageSender: messageSender);
+              final user = loggedinUser.email;
+
+
+              final messageBubble = MessageBubble(
+                  messageText: messageText, messageSender: messageSender, isMe: user == messageSender,);
               messageWidgets.add(messageBubble);
             }
             return Expanded(
               child: ListView(
-                padding: EdgeInsets.symmetric(vertical: 10,horizontal: 5),
+                reverse: true,
+                padding: EdgeInsets.symmetric(vertical: 10, horizontal: 5),
                 children: messageWidgets,
               ),
             );
